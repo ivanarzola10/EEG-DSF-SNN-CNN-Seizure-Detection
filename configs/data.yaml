@@ -1,0 +1,51 @@
+# Data configuration. Every value here is a *proposed* choice
+# from PROJECT_HANDOFF.md §3 unless marked otherwise; change it here, not in code.
+
+dataset:
+  name: chbmit
+  version: "1.0.0"
+  raw_dir: data/raw
+  sampling_rate_hz: 256           # native rate; files with any other rate are rejected
+  # Case folders that are the same person (PhysioNet: chb21 was recorded from the chb01
+  # subject 1.5 years later). Splits are made over subject_id, never over case folder.
+  same_subject:
+    chb21: chb01
+
+# 18 bipolar derivations (not 18 electrodes). Order defines the channel axis.
+montage:
+  derivations:
+    - FP1-F7
+    - F7-T7
+    - T7-P7
+    - P7-O1
+    - FP1-F3
+    - F3-C3
+    - C3-P3
+    - P3-O1
+    - FP2-F8
+    - F8-T8
+    - T8-P8
+    - P8-O2
+    - FP2-F4
+    - F4-C4
+    - C4-P4
+    - P4-O2
+    - FZ-CZ
+    - CZ-PZ
+  # Harmonization policy (deterministic, documented in README):
+  #  * labels are compared after strip() + upper(); nothing else is renamed
+  #  * a derivation that appears more than once (e.g. T8-P8 in chb01) uses the FIRST
+  #    occurrence; the audit verifies whether the copies are sample-identical
+  #  * a file missing any derivation is excluded (no re-referencing / synthesis)
+
+preprocessing:
+  units: uV
+  bandpass:
+    type: butterworth
+    order: 4
+    low_hz: 1.0
+    high_hz: 40.0
+    causal: true                  # scipy.signal.sosfilt, single forward pass
+    initial_state: steady_state_first_sample   # zi scaled by x[0]; uses no future samples
+  # Each EDF is filtered as one continuous stream. Files are NOT concatenated because
+  # consecutive CHB-MIT files have gaps between them.

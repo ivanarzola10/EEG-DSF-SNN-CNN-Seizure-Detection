@@ -1,0 +1,31 @@
+# Data: CHB-MIT EDFs are large and redistributed by PhysioNet; never commit them.
+data/raw/
+data/processed/
+*.edf
+*.npy
+*.npz
+*.h5
+
+# Model checkpoints and large outputs
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+results/**/large/
+results/figures/
+runs/
+wandb/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

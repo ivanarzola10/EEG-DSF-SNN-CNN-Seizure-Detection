@@ -1,0 +1,13 @@
+# Data exploration — versions verified on Python 3.11.9, Windows 11.
+mne==1.13.2
+numpy==2.4.6
+scipy==1.17.1
+pandas==3.0.6
+matplotlib==3.11.2
+PyYAML==6.0.3
+pytest==9.1.1
+
+# Modeling (later) — install when model training starts; pin versions then.
+# torch
+# snntorch
+# scikit-learn

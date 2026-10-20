@@ -1,0 +1,10 @@
+[project]
+name = "eeg-dsf-snn-cnn"
+version = "0.1.0"
+description = "Seizure detection under missing EEG channels: DSF x CNN/SNN on CHB-MIT"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = ["data: needs local CHB-MIT files (skipped if absent)"]
