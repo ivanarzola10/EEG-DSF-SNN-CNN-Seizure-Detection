@@ -1,0 +1,52 @@
+# Compact EESNN configuration. Change values here, not in code.
+#
+# Sources:
+#   [paper] Zhang et al. 2024, Front. Neurosci. 17:1303564 (EESNN)
+#   [code]  github.com/snowbbbb/EESNN-epileptic-seizure-detection
+#           (run_IDE_multilayer_BPTT_chbmit.py, modules/test_bptt_snn_modules.py)
+#   [ours]  our choice, we can change this later on
+#
+# Input layout: windows [B, 18, 1024] (channels x time) enter as a one-channel image
+# [B, 1, 18, 1024]; kernels and strides below are (channels, time).
+
+model:
+  # Depth / width: compact version of EESNN [ours]. The reference CHB-MIT model has
+  # 5 hidden layers with 64/256/384/384/256 channels (~9-10M params) [code].
+  n_hidden: 1                   # 1 or 2; the paper's headline example is single-layer [paper]
+  channels: [16, 32]            # conv channels per hidden layer; first n_hidden entries are used
+
+  # First layer F1. A 20-sample, stride-4 time kernel at 256 Hz spans ~78 ms, the same as
+  # the reference 5-sample kernel at their 64 Hz [ours]. After it the time axis is 256 long,
+  # matching their resolution, so later layers reuse their 5x5 kernel [code].
+  input_kernel: [5, 20]
+  input_stride: [1, 4]
+  hidden_kernel: [5, 5]         # [code]
+  hidden_stride: [1, 2]         # stride of F2..FH; reference halves time in one layer [code]
+  feedback_kernel: [3, 3]       # W1 (last hidden -> layer 1) is a transposed conv [code]
+
+  # LIF neuron, Eq. (1) of our proposal: u_half = leak*u + I; s = H(u_half - v_th);
+  # u = u_half - v_th*s (soft reset).
+  time_steps: 2                 # constant input repeated each step [paper][code]
+  v_th: 2.0                     # [code]
+  leak: 0.95                    # [code]
+  surrogate: rectangular        # [code]
+  surrogate_width: 1.0          # dS/du = 1/width when |u - v_th| < width/2, else 0 [paper][code]
+
+  batch_norm: true              # after every feedforward conv [code]
+  feedback_spectral_norm: true  # on W1, no bias [code]
+  dropout: 0.0                  # [code] CHB-MIT config
+
+  # Readout: leak-weighted average firing rate of the last hidden layer [code], pooled over
+  # time to this many bins [ours], flattened, then Linear -> 1 logit. The paper uses one
+  # output neuron [paper]; the code's 2-output max-of-sigmoids is not reproduced.
+  readout_pool_time: 16
+
+train:
+  loss: bce_with_logits         # sigmoid output, same objective as the CNN [ours]
+  optimizer: adam               # [code]
+  lr: 1.0e-3                    # not recorded in [code]; tune on validation data
+  weight_decay: 0.0             # [code] default "Adam" option
+  batch_size: 64                # [code]
+  epochs: 50                    # [code]
+  seed: 42                      # [code]
+  select_on: val_pr_auc         # [ours]; reference used 1.5*recall + specificity + AUC
