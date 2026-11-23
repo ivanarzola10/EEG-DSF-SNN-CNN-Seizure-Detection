@@ -40,6 +40,9 @@ montage:
 
 preprocessing:
   units: uV
+  # Proposal preparation uses unfiltered signals. Settings below are retained
+  # exclusively for legacy plotting/filter experiments, not prepare_dataset.py.
+  filtering: none
   bandpass:
     type: butterworth
     order: 4

@@ -65,6 +65,8 @@ def main() -> None:
             flags.append("no_header")
         else:
             m = match_montage(header.labels, derivations)
+            if (raw / rel).stat().st_size != header.expected_file_bytes:
+                flags.append("file_size_mismatch")
             rates = sorted(set(header.sampling_rates))
             row.update({
                 "n_signals": header.n_signals,
@@ -90,7 +92,7 @@ def main() -> None:
                     flags.append("seizure_outside_recording")
         row["flags"] = ";".join(flags)
         row["usable"] = not (set(flags) & {"no_summary_entry", "no_header", "montage_incomplete", "sampling_rate",
-                                           "seizure_outside_recording"})
+                                           "seizure_outside_recording", "file_size_mismatch", "seizure_list_mismatch"})
         rows.append(row)
 
     files = pd.DataFrame(rows)

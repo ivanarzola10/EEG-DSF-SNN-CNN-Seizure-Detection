@@ -1,11 +1,9 @@
 # EEG Seizure Detection Under Missing Channels — Project Handoff
 
-**Status:** GitHub repository created; implementation not yet started.  
-**Team:** Two people.  
-**Scope:** Course project first, with potential follow-up research paper.  
-**Updated:** October 19, 2026.
-
-> **Instructions to the next coding/research agent:** Continue this project incrementally in the user's repository. Start with dataset ingestion and verification, not model training. Keep the pipeline causal, patient-disjoint, reproducible, and small enough for a two-person course project. Distinguish established paper findings from our proposed design choices. Do not claim novelty or energy savings without evidence.
+The [README](README.md) gives the implemented protocol and current workflow,
+including the frozen cohort, unfiltered preprocessing, ShallowFBCSPNet baseline,
+and shared evaluation masks. The model and preprocessing suggestions below
+record the original planning discussion.
 
 ## 1. Project objective
 
@@ -197,13 +195,13 @@ Primary comparisons:
 └── results/                          # concise tracked summaries; large outputs ignored
 ```
 
-The filenames above are **proposed**. Adapt to the repo's existing structure rather than overwriting user work.
+The filenames above are **proposed** and can be adapted to the repository's existing structure.
 
-## 9. Immediate tasks for the next agent — START HERE
+## 9. Initial implementation milestones
 
-**Do not start by implementing all four networks. First make the data trustworthy.**
+Validate the data pipeline before implementing the models.
 
-1. Inspect the repository and existing files; preserve current work. Check `.gitignore` so full EDF data and model checkpoints are **not committed**.
+1. Check that `.gitignore` excludes full EDF recordings and model checkpoints.
 2. Set up a reproducible Python environment with `mne`, `numpy`, `scipy`, `pandas`, `torch`, `scikit-learn`, `matplotlib`, `snntorch`, and `pytest` (install dependencies only as needed).
 3. Obtain the small CHB-MIT sample: `chb01_01.edf`, `chb01_03.edf`, `chb01-summary.txt`. Confirm download URLs against PhysioNet; avoid pulling the entire dataset initially.
 4. Implement EDF inspection: print recording duration, sampling rate, exact channel names, and EEG signal shape.
@@ -211,7 +209,7 @@ The filenames above are **proposed**. Adapt to the repo's existing structure rat
 6. Implement a **channel-montage audit** over available files. Report which recordings contain the proposed 18 derivations and any naming inconsistencies.
 7. Implement causal preprocessing and 4-second windows with a 1-second stride. Return the signal, label, patient ID, file ID, start time, and end time. Unit-test labels and boundary conditions.
 8. Propose a **patient-disjoint split** only after reviewing the multi-patient seizure/recording audit. Save its manifest; do not use random window splitting.
-9. Show the user: (a) seizure plot, (b) channel audit, (c) window counts by class and patient, (d) exact scripts to reproduce. **Then** move to the compact CNN.
+9. Document the seizure plot, channel audit, window counts by class and patient, and scripts to reproduce these outputs before implementing the CNN.
 
 **Definition of first success:** A deterministic pipeline that loads CHB-MIT, identifies an annotated seizure, prints verified channel information, and produces correctly timed `(channels, 1024)` labeled windows without leakage.
 

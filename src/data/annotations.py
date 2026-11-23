@@ -13,8 +13,8 @@ from pathlib import Path
 _FILE = re.compile(r"^File Name:\s*(\S+)")
 _FILE_START = re.compile(r"^File Start Time:\s*(\S+)")
 _FILE_END = re.compile(r"^File End Time:\s*(\S+)")
-_N_SEIZ = re.compile(r"^Number of Seizures in File:\s*(\d+)")
-_SEIZ = re.compile(r"^Seizure(?:\s+(\d+))?\s+(Start|End)\s+Time:\s*(\d+)\s*sec", re.IGNORECASE)
+_N_SEIZ = re.compile(r"^Number of Seizures in File:\s*(\d+)$")
+_SEIZ = re.compile(r"^Seizure(?:\s+(\d+))?\s+(Start|End)\s+Time:\s*(\d+)\s*seconds?$", re.IGNORECASE)
 _CHANNEL = re.compile(r"^Channel\s+(\d+):\s*(.*)$")
 _CHANNEL_BLOCK = re.compile(r"^Channels (in EDF Files|changed):")
 
@@ -110,6 +110,8 @@ def parse_summary(text: str) -> dict[str, SummaryEntry]:
                 raise ValueError(f"{current.file_id}: seizure end without a start")
             else:
                 pending[-1][1] = seconds
+        elif line.startswith("Number of Seizures") or re.match(r"^Seizure.*Time:", line, re.IGNORECASE):
+            raise ValueError(f"{current.file_id}: malformed seizure annotation: {line}")
     close_file()
     return entries
 

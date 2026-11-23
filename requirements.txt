@@ -7,7 +7,10 @@ matplotlib==3.11.2
 PyYAML==6.0.3
 pytest==9.1.1
 
-# Modeling (later) — install when model training starts; pin versions then.
-# torch
 # snntorch
-# scikit-learn
+
+# Proposal CNN (tested with Python 3.11.9).
+torch==2.15.0
+torchaudio==2.11.1
+braindecode==1.2.0
+scikit-learn==1.9.1
