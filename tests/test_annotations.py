@@ -81,3 +81,9 @@ def test_clock_times_past_midnight():
     entries = parse_summary(SUMMARY)
     assert summary_duration_s(entries["chb06_01"]) == 3600
     assert summary_duration_s(entries["chb01_01"]) == 3600
+
+
+def test_malformed_seizure_line_in_negative_recording_raises():
+    bad = SUMMARY.replace("Seizures in File: 0", "Seizures in File: 0\nSeizure Start Time: unknown")
+    with pytest.raises(ValueError, match="chb01_01: malformed seizure annotation"):
+        parse_summary(bad)

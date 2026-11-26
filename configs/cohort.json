@@ -1,0 +1,468 @@
+{
+  "seed": 42,
+  "selection": "18 subjects with no observed problems and retained seizures; rank by usable/expected recording coverage, then usable recording count, then subject ID",
+  "split_method": "three ranked seizure-count strata of six subjects, each split 4 train / 1 validation / 1 test",
+  "audit_sha256": "40abf70ee5aab6bca6b5b588608966c230019010ddc40943c7878b9a70d2d9bb",
+  "subjects": [
+    {
+      "subject_id": "chb01",
+      "case_folders": [
+        "chb01",
+        "chb21"
+      ],
+      "recordings": 75,
+      "usable_recordings": 60,
+      "missing_recordings": 15,
+      "problem_recordings": 0,
+      "seizures": 7,
+      "coverage": 0.8,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb02",
+      "case_folders": [
+        "chb02"
+      ],
+      "recordings": 36,
+      "usable_recordings": 27,
+      "missing_recordings": 9,
+      "problem_recordings": 0,
+      "seizures": 3,
+      "coverage": 0.75,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb03",
+      "case_folders": [
+        "chb03"
+      ],
+      "recordings": 38,
+      "usable_recordings": 26,
+      "missing_recordings": 12,
+      "problem_recordings": 0,
+      "seizures": 4,
+      "coverage": 0.6842105263157895,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb04",
+      "case_folders": [
+        "chb04"
+      ],
+      "recordings": 42,
+      "usable_recordings": 7,
+      "missing_recordings": 35,
+      "problem_recordings": 0,
+      "seizures": 2,
+      "coverage": 0.16666666666666666,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb05",
+      "case_folders": [
+        "chb05"
+      ],
+      "recordings": 39,
+      "usable_recordings": 21,
+      "missing_recordings": 18,
+      "problem_recordings": 0,
+      "seizures": 3,
+      "coverage": 0.5384615384615384,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb06",
+      "case_folders": [
+        "chb06"
+      ],
+      "recordings": 18,
+      "usable_recordings": 2,
+      "missing_recordings": 16,
+      "problem_recordings": 0,
+      "seizures": 4,
+      "coverage": 0.1111111111111111,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb07",
+      "case_folders": [
+        "chb07"
+      ],
+      "recordings": 19,
+      "usable_recordings": 5,
+      "missing_recordings": 13,
+      "problem_recordings": 1,
+      "seizures": 1,
+      "coverage": 0.2631578947368421,
+      "eligible": false,
+      "selected": false
+    },
+    {
+      "subject_id": "chb08",
+      "case_folders": [
+        "chb08"
+      ],
+      "recordings": 20,
+      "usable_recordings": 16,
+      "missing_recordings": 4,
+      "problem_recordings": 0,
+      "seizures": 4,
+      "coverage": 0.8,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb09",
+      "case_folders": [
+        "chb09"
+      ],
+      "recordings": 19,
+      "usable_recordings": 7,
+      "missing_recordings": 12,
+      "problem_recordings": 0,
+      "seizures": 3,
+      "coverage": 0.3684210526315789,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb10",
+      "case_folders": [
+        "chb10"
+      ],
+      "recordings": 25,
+      "usable_recordings": 16,
+      "missing_recordings": 9,
+      "problem_recordings": 0,
+      "seizures": 5,
+      "coverage": 0.64,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb11",
+      "case_folders": [
+        "chb11"
+      ],
+      "recordings": 35,
+      "usable_recordings": 24,
+      "missing_recordings": 11,
+      "problem_recordings": 0,
+      "seizures": 3,
+      "coverage": 0.6857142857142857,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb12",
+      "case_folders": [
+        "chb12"
+      ],
+      "recordings": 24,
+      "usable_recordings": 7,
+      "missing_recordings": 11,
+      "problem_recordings": 6,
+      "seizures": 9,
+      "coverage": 0.2916666666666667,
+      "eligible": false,
+      "selected": false
+    },
+    {
+      "subject_id": "chb13",
+      "case_folders": [
+        "chb13"
+      ],
+      "recordings": 33,
+      "usable_recordings": 20,
+      "missing_recordings": 13,
+      "problem_recordings": 0,
+      "seizures": 7,
+      "coverage": 0.6060606060606061,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb14",
+      "case_folders": [
+        "chb14"
+      ],
+      "recordings": 26,
+      "usable_recordings": 19,
+      "missing_recordings": 7,
+      "problem_recordings": 0,
+      "seizures": 5,
+      "coverage": 0.7307692307692307,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb15",
+      "case_folders": [
+        "chb15"
+      ],
+      "recordings": 40,
+      "usable_recordings": 1,
+      "missing_recordings": 21,
+      "problem_recordings": 18,
+      "seizures": 0,
+      "coverage": 0.025,
+      "eligible": false,
+      "selected": false
+    },
+    {
+      "subject_id": "chb16",
+      "case_folders": [
+        "chb16"
+      ],
+      "recordings": 19,
+      "usable_recordings": 14,
+      "missing_recordings": 5,
+      "problem_recordings": 0,
+      "seizures": 8,
+      "coverage": 0.7368421052631579,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb17",
+      "case_folders": [
+        "chb17"
+      ],
+      "recordings": 21,
+      "usable_recordings": 9,
+      "missing_recordings": 11,
+      "problem_recordings": 1,
+      "seizures": 0,
+      "coverage": 0.42857142857142855,
+      "eligible": false,
+      "selected": false
+    },
+    {
+      "subject_id": "chb18",
+      "case_folders": [
+        "chb18"
+      ],
+      "recordings": 36,
+      "usable_recordings": 20,
+      "missing_recordings": 16,
+      "problem_recordings": 0,
+      "seizures": 5,
+      "coverage": 0.5555555555555556,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb19",
+      "case_folders": [
+        "chb19"
+      ],
+      "recordings": 30,
+      "usable_recordings": 22,
+      "missing_recordings": 8,
+      "problem_recordings": 0,
+      "seizures": 2,
+      "coverage": 0.7333333333333333,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb20",
+      "case_folders": [
+        "chb20"
+      ],
+      "recordings": 29,
+      "usable_recordings": 23,
+      "missing_recordings": 6,
+      "problem_recordings": 0,
+      "seizures": 8,
+      "coverage": 0.7931034482758621,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb22",
+      "case_folders": [
+        "chb22"
+      ],
+      "recordings": 31,
+      "usable_recordings": 26,
+      "missing_recordings": 5,
+      "problem_recordings": 0,
+      "seizures": 2,
+      "coverage": 0.8387096774193549,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb23",
+      "case_folders": [
+        "chb23"
+      ],
+      "recordings": 9,
+      "usable_recordings": 6,
+      "missing_recordings": 3,
+      "problem_recordings": 0,
+      "seizures": 5,
+      "coverage": 0.6666666666666666,
+      "eligible": true,
+      "selected": true
+    },
+    {
+      "subject_id": "chb24",
+      "case_folders": [
+        "chb24"
+      ],
+      "recordings": 22,
+      "usable_recordings": 12,
+      "missing_recordings": 2,
+      "problem_recordings": 8,
+      "seizures": 16,
+      "coverage": 0.5454545454545454,
+      "eligible": false,
+      "selected": false
+    }
+  ],
+  "strata": [
+    {
+      "subject_id": "chb02",
+      "seizures": 3,
+      "stratum": 0,
+      "split": "train"
+    },
+    {
+      "subject_id": "chb22",
+      "seizures": 2,
+      "stratum": 0,
+      "split": "train"
+    },
+    {
+      "subject_id": "chb09",
+      "seizures": 3,
+      "stratum": 0,
+      "split": "train"
+    },
+    {
+      "subject_id": "chb05",
+      "seizures": 3,
+      "stratum": 0,
+      "split": "train"
+    },
+    {
+      "subject_id": "chb19",
+      "seizures": 2,
+      "stratum": 0,
+      "split": "val"
+    },
+    {
+      "subject_id": "chb04",
+      "seizures": 2,
+      "stratum": 0,
+      "split": "test"
+    },
+    {
+      "subject_id": "chb06",
+      "seizures": 4,
+      "stratum": 1,
+      "split": "train"
+    },
+    {
+      "subject_id": "chb10",
+      "seizures": 5,
+      "stratum": 1,
+      "split": "train"
+    },
+    {
+      "subject_id": "chb11",
+      "seizures": 3,
+      "stratum": 1,
+      "split": "train"
+    },
+    {
+      "subject_id": "chb03",
+      "seizures": 4,
+      "stratum": 1,
+      "split": "train"
+    },
+    {
+      "subject_id": "chb08",
+      "seizures": 4,
+      "stratum": 1,
+      "split": "val"
+    },
+    {
+      "subject_id": "chb14",
+      "seizures": 5,
+      "stratum": 1,
+      "split": "test"
+    },
+    {
+      "subject_id": "chb20",
+      "seizures": 8,
+      "stratum": 2,
+      "split": "train"
+    },
+    {
+      "subject_id": "chb16",
+      "seizures": 8,
+      "stratum": 2,
+      "split": "train"
+    },
+    {
+      "subject_id": "chb01",
+      "seizures": 7,
+      "stratum": 2,
+      "split": "train"
+    },
+    {
+      "subject_id": "chb13",
+      "seizures": 7,
+      "stratum": 2,
+      "split": "train"
+    },
+    {
+      "subject_id": "chb18",
+      "seizures": 5,
+      "stratum": 2,
+      "split": "val"
+    },
+    {
+      "subject_id": "chb23",
+      "seizures": 5,
+      "stratum": 2,
+      "split": "test"
+    }
+  ],
+  "splits": {
+    "train": [
+      "chb01",
+      "chb02",
+      "chb03",
+      "chb05",
+      "chb06",
+      "chb09",
+      "chb10",
+      "chb11",
+      "chb13",
+      "chb16",
+      "chb20",
+      "chb21",
+      "chb22"
+    ],
+    "val": [
+      "chb08",
+      "chb18",
+      "chb19"
+    ],
+    "test": [
+      "chb04",
+      "chb14",
+      "chb23"
+    ]
+  }
+}

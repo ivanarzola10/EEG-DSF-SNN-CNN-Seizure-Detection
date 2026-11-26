@@ -7,9 +7,13 @@ matplotlib==3.11.2
 PyYAML==6.0.3
 pytest==9.1.1
 
-# Modeling — versions verified on Python 3.11.9, Windows 11, CUDA 12.8.
+# Modeling — versions verified on Python 3.11.9, Windows 11, CUDA 12.8 (RTX 5080).
 # For GPU, install torch from the CUDA index first:
 #   pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cu128
+# The cnn branch pinned torch==2.15.0; torchaudio 2.11.1 (required by braindecode)
+# is built for torch 2.11, so 2.11.0 is kept here.
 torch==2.11.0
+torchaudio==2.11.1
 scikit-learn==1.8.0
+braindecode==1.2.0   # proposal CNN (ShallowFBCSPNet)
 # snntorch  (optional cross-check; not used by the hand-written LIF)
