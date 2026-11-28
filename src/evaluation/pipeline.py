@@ -16,8 +16,10 @@ from torch.utils.data import DataLoader
 from src.data.channel_masks import make_mask_manifest, validate_mask_manifest, RecordingMaskedDataset, validate_experiment
 from src.data.preparation import validate_splits
 from src.data.torch_dataset import WindowDataset
+from src.evaluation.energy import SpikeDensityProbe, dense_macs, energy_estimate, weighted_firing_rate
 from src.evaluation.events import calibrate_rules, recording_events, summarize_events, validate_alarm_policy
-from src.models.cnn import ShallowEEGCNN
+from src.models.dsf import DynamicSpatialFilter, ImportanceProbe
+from src.models.registry import build_model
 from src.training.cnn import binary_metrics, choose_device, evaluate
 
 
@@ -97,7 +99,12 @@ def benchmark(model, dataset, device, batch_size, iterations=10):
         import subprocess
         hardware = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True, text=True)
         cpu = hardware.stdout.strip() or cpu
-    return dict(parameters=sum(p.numel() for p in model.parameters()), batch_size=batch_size,
+    front_end = getattr(model, "front_end", None)
+    front_params = sum(p.numel() for p in front_end.parameters()) if front_end is not None else 0
+    return dict(parameters=sum(p.numel() for p in model.parameters()),
+                front_end_parameters=front_params,  # DSF does not spike: reported separately
+                backbone_parameters=sum(p.numel() for p in model.parameters()) - front_params,
+                batch_size=batch_size,
                 input_condition="complete_channels",
                 warmup_batches=3, measured_batches=iterations, seconds_per_window=elapsed / (iterations * batch_size),
                 scope="model forward only; includes any attached DSF; excludes disk IO, normalization, masking and alarm processing",
@@ -108,7 +115,8 @@ def benchmark(model, dataset, device, batch_size, iterations=10):
 
 def summarize_patients(patient_rows):
     frame = pd.DataFrame(patient_rows)
-    metrics = ["pr_auc", "average_precision", "event_sensitivity", "false_alarms_per_hour",
+    metrics = ["pr_auc", "average_precision", "roc_auc", "sensitivity", "specificity", "gmean", "raccuracy",
+               "event_sensitivity", "false_alarms_per_hour",
                "mean_detection_delay_s", "median_detection_delay_s", "missed_seizures"]
     baseline = frame[frame.missing_fraction == 0].set_index("subject_id")
     for metric in metrics:
@@ -173,26 +181,61 @@ def run(args, *, front_end=None):
     device = choose_device(args.device)
     if args.threads:
         torch.set_num_threads(args.threads)
-    model = ShallowEEGCNN(**checkpoint["config"]["model"], front_end=front_end).to(device)
+    model = build_model(checkpoint["config"], front_end=front_end).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
+    spiking = hasattr(model, "reset_spike_stats")
+    dense = dense_macs(model, model.input_shape)
+    probe = SpikeDensityProbe(model) if spiking else None
+    dsf = getattr(model, "front_end", None)
+    dsf_probe = ImportanceProbe(dsf) if isinstance(dsf, DynamicSpatialFilter) else None
+    channel_names = masks["channels"]
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     (output / "predictions").mkdir()
     provenance = dict(status="running", stage=args.stage, checkpoint_sha256=checkpoint_hash,
                       data_fingerprints=data_hashes, mask_manifest_sha256=mask_hash, experiment=experiment,
                       training_channel_masking=checkpoint["config"].get("channel_masking", "none"),
+                      model_type=checkpoint["config"].get("model_type", "cnn"),
+                      dsf=checkpoint["config"].get("dsf"),
                       timestamp_utc=datetime.now(timezone.utc).isoformat(), split=split)
     write_json(output / "provenance.json", provenance)
     write_json(output / "mask_manifest.json", masks)
     conditions = [(0.0, 0)] if args.stage == "calibrate" else [
         (f, r) for f in experiment["missing_fractions"]
         for r in range(1 if f == 0 else experiment["evaluation_repeats"])]
-    patients, event_rows, alert_rows, pooled = [], [], [], []
+    patients, event_rows, alert_rows, pooled, energies, importance_rows = [], [], [], [], [], []
     for fraction, repeat in conditions:
         print(f"{split}: missing={fraction:.0%}, subset={repeat}; windows={len(dataset)}", flush=True)
         masked = RecordingMaskedDataset(dataset, masks, split, fraction, repeat)
         loader = DataLoader(masked, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
+        if spiking:
+            model.reset_spike_stats()
+            probe.reset()
+        if dsf_probe is not None:
+            dsf_probe.reset()
         metrics, labels, probabilities = evaluate(model, loader, device, args.log_every)
+        # DSF only: normalized effective channel importance (Banville et al. Eq. 5), averaged
+        # over windows, for available vs masked channels -- does DSF down-weight lost channels?
+        dsf_columns = {}
+        if dsf_probe is not None:
+            phi = dsf_probe.summary()
+            dsf_columns = dict(dsf_importance_available=phi["available_mean"],
+                               dsf_importance_missing=phi["missing_mean"])
+            importance_rows.extend(dict(missing_fraction=fraction, repeat=repeat, channel=name,
+                                        importance_available=phi["available"][i],
+                                        importance_missing=phi["missing"][i])
+                                   for i, name in enumerate(channel_names))
+        # SNN only: mean firing rate per hidden layer over this condition's windows, and the
+        # neuron-weighted rate over all hidden neurons (the paper's "average spiking probability").
+        spikes = {}
+        if spiking:
+            rates = model.spike_stats()["eval"]
+            spikes = {f"firing_rate_layer{i + 1}": rate for i, rate in enumerate(rates)}
+            spikes["firing_rate_mean"] = weighted_firing_rate(rates, model.neurons_per_layer())
+        energy = energy_estimate(dense, probe.densities() if spiking else None)
+        energy["front_end_macs"] = dense.get("front_end", 0.0)  # DSF MACs (eigendecomposition not counted)
+        energies.append(dict(missing_fraction=fraction, repeat=repeat, **energy, **spikes))
+        operations = {k: energy[k] for k in ("macs", "accumulates", "synaptic_operations", "energy_mj", "dense_energy_mj")}
         np.savez_compressed(output / "predictions" / f"missing_{fraction:.2f}_repeat_{repeat:02}.npz",
                             labels=labels, probabilities=probabilities, window_row=np.arange(len(dataset)))
         records = prediction_recordings(dataset, probabilities, manifest, annotations)
@@ -209,11 +252,16 @@ def run(args, *, front_end=None):
             write_json(output / "calibration_candidates.json", candidates)
             print(f"Selected alarm rule: {selected['rule']}; validation event metrics: {selected['metrics']}", flush=True)
         rows, events, alerts = patient_results(dataset, labels, probabilities, records, calibration["rule"], fraction, repeat)
-        pooled.append(dict(missing_fraction=fraction, repeat=repeat, **metrics,
+        pooled.append(dict(missing_fraction=fraction, repeat=repeat, **metrics, **spikes, **operations, **dsf_columns,
                            **summarize_events([score_recording(r, calibration["rule"]) for r in records])))
         patients.extend(rows)
         event_rows.extend(events)
         alert_rows.extend(alerts)
+    if probe is not None:
+        probe.remove()  # keep the timing benchmark free of hook overhead
+    if dsf_probe is not None:
+        dsf_probe.remove()
+        pd.DataFrame(importance_rows).to_csv(output / "dsf_channel_importance.csv", index=False)
     frame, summary = summarize_patients(patients)
     pooled_frame = pd.DataFrame(pooled)
     pr_auc = pd.to_numeric(pooled_frame.pr_auc)
@@ -228,7 +276,13 @@ def run(args, *, front_end=None):
                alarm_semantics="scores strictly above threshold; consecutive 1-second windows; one alert per above-threshold run with causal cooldown; state resets at each EDF; event matching is onset-inclusive/offset-exclusive",
                false_alarm_denominator="entire included EDF duration minus annotated seizure duration, including startup time",
                timing=benchmark(model, dataset, device, args.batch_size),
+               energy=energies[0],  # complete channels; every condition is in pooled_metrics.csv
+               paper_metrics=("window-level at fixed p > 0.5 (Zhang et al. 2024): sensitivity, specificity, "
+                              "gmean = sqrt(sens*spec), raccuracy = (sens+spec)/2 (r = negatives/positives); "
+                              "roc_auc is threshold-free"),
                training_channel_masking=provenance["training_channel_masking"],
+               model_type=provenance["model_type"],
+               dsf=provenance["dsf"],
                test_set_evaluated=args.stage == "test", rule=calibration["rule"]))
     if args.stage == "test":
         write_json(output / "calibration.json", calibration)

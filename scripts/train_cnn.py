@@ -20,7 +20,8 @@ from src.data.channel_masks import validate_experiment
 from src.data.torch_dataset import WindowDataset
 from src.evaluation.events import validate_alarm_policy
 from src.evaluation.pipeline import fingerprint, run, write_json
-from src.models.cnn import ShallowEEGCNN
+from src.models.dsf import PRESETS, dsf_spec
+from src.models.registry import build_model
 from src.training.cnn import fit, seed_everything
 
 
@@ -32,6 +33,9 @@ def parse_args():
     parser.add_argument("--experiment-config", type=Path, default=Path("configs/experiment.json"))
     parser.add_argument("--channel-masking", choices=["mixed", "none"], default="mixed",
                         help="Default: uniform complete/25/50/75%% missing-channel augmentation; none is an ablation")
+    parser.add_argument("--dsf", choices=["none", *PRESETS], default="none",
+                        help="Dynamic Spatial Filtering front end: dsfd (log-variance) or dsfm_st "
+                             "(matrix-log covariance + soft threshold); none = plain CNN")
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--patience", type=int, default=5, help="Epochs without improved validation PR-AUC; 0 disables")
     parser.add_argument("--batch-size", type=int, default=16)
@@ -66,7 +70,8 @@ def main():
     validate_alarm_policy(experiment["alarm_calibration"])
     cfg, cohort, sources, unavailable = resolve_inputs(args.raw_dir)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    output = (Path("runs") / ("cnn_smoke" if args.smoke else "cnn") / timestamp).resolve()
+    name = "cnn" if args.dsf == "none" else f"cnn_{args.dsf}"
+    output = (Path("runs") / (f"{name}_smoke" if args.smoke else name) / timestamp).resolve()
     output.mkdir(parents=True, exist_ok=False)
     cache = args.data_root.resolve()
     if args.smoke:
@@ -97,7 +102,8 @@ def main():
                           Path("scripts/prepare_dataset.py"), Path("configs/recording_inventory.csv"))},
                       selection_metric="trapezoidal precision-recall AUC; average precision reported separately",
                       reproducibility="fixed RNG seeds; deterministic algorithms requested with warnings; bitwise identity across hardware is not guaranteed",
-                      channel_masking=args.channel_masking, experiment=experiment, test_evaluated=False)
+                      channel_masking=args.channel_masking, experiment=experiment,
+                      dsf=dsf_spec(args.dsf), test_evaluated=False)
     write_json(output / "provenance.json", provenance)
     experiment_path = output / "experiment.json"
     write_json(experiment_path, experiment)
@@ -107,7 +113,8 @@ def main():
     settings = [(count, kernel, pool, stride)
                 for count, kernel, (pool, stride) in itertools.product(filters, [25, 51], [(75, 15), (150, 30)])]
     config = {k: v for k, v in vars(args).items() if k not in ("raw_dir", "data_root", "experiment_config")}
-    config.update(experiment=experiment, imbalance_policy="inverse-frequency weighted loss only")
+    config.update(experiment=experiment, imbalance_policy="inverse-frequency weighted loss only",
+                  model_type="cnn", dsf=dsf_spec(args.dsf))
     write_json(output / "config.json", dict(config, candidates=settings))
     results = []
     best = None
@@ -117,8 +124,9 @@ def main():
                             pool_size=pool, pool_stride=stride, dropout=args.dropout,
                             n_channels=18, n_times=1024, n_classes=2)
         print(f"Candidate {trial + 1}/{len(settings)}: {model_config}", flush=True)
-        summary = fit(ShallowEEGCNN(**model_config), datasets["train"], datasets["val"],
-                      output / f"candidate_{trial:02}", dict(config, model=model_config), provenance)
+        candidate = dict(config, model=model_config)
+        summary = fit(build_model(candidate), datasets["train"], datasets["val"],
+                      output / f"candidate_{trial:02}", candidate, provenance)
         results.append({**summary, "model": model_config})
         if best is None or summary["best_validation_pr_auc"] > best["best_validation_pr_auc"]:
             best = results[-1]
@@ -134,7 +142,7 @@ def main():
     run(SimpleNamespace(**evaluation, stage="calibrate", output=calibration.parent, calibration=None))
     run(SimpleNamespace(**evaluation, stage="test", output=output / "test", calibration=calibration))
     write_json(output / "selection.json", dict(selection, test_evaluated=True))
-    print(f"Completed {'smoke' if args.smoke else 'final'} run at {output}", flush=True)
+    print(f"Completed {name} {'smoke' if args.smoke else 'final'} run at {output}", flush=True)
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from sklearn.metrics import auc, average_precision_score, precision_recall_curve
+from sklearn.metrics import auc, average_precision_score, precision_recall_curve, roc_auc_score
 from torch import nn
 from torch.utils.data import DataLoader, RandomSampler
 from src.data.channel_masks import training_mask
@@ -42,7 +42,15 @@ def choose_device(requested):
     return torch.device(requested)
 
 
+PAPER_THRESHOLD = 0.5  # Zhang et al. 2024 classify a window as seizure if p > 0.5
+
+
 def binary_metrics(labels, probabilities):
+    """Window-level metrics. Threshold-free: PR-AUC, average precision, ROC-AUC.
+    At the paper's fixed threshold (p > 0.5, independent of the calibrated alarm rule):
+    sensitivity, specificity, GMean = sqrt(sens * spec) and RAccuracy = (sens + spec) / 2,
+    which is the paper's r-weighted accuracy with r = negatives / positives (balanced
+    accuracy). Undefined values are None (e.g. sensitivity with no seizure windows)."""
     labels = np.asarray(labels)
     probabilities = np.asarray(probabilities)
     if not len(labels) or not np.isin(labels, [0, 1]).all():
@@ -52,11 +60,23 @@ def binary_metrics(labels, probabilities):
     if (probabilities < 0).any() or (probabilities > 1).any():
         raise ValueError("Probabilities must be between zero and one")
     metrics = dict(windows=len(labels), positives=int(labels.sum()), prevalence=float(labels.mean()),
-                   pr_auc=None, average_precision=None)
+                   pr_auc=None, average_precision=None, roc_auc=None)
     if len(np.unique(labels)) == 2:
         precision, recall, _ = precision_recall_curve(labels, probabilities)
         metrics.update(pr_auc=float(auc(recall, precision)),
-                       average_precision=float(average_precision_score(labels, probabilities)))
+                       average_precision=float(average_precision_score(labels, probabilities)),
+                       roc_auc=float(roc_auc_score(labels, probabilities)))
+    predicted = probabilities > PAPER_THRESHOLD
+    positive = labels == 1
+    tp, fn = int((predicted & positive).sum()), int((~predicted & positive).sum())
+    tn, fp = int((~predicted & ~positive).sum()), int((predicted & ~positive).sum())
+    sensitivity = tp / (tp + fn) if tp + fn else None
+    specificity = tn / (tn + fp) if tn + fp else None
+    both = sensitivity is not None and specificity is not None
+    metrics.update(decision_threshold=PAPER_THRESHOLD, tp=tp, fp=fp, tn=tn, fn=fn,
+                   sensitivity=sensitivity, specificity=specificity,
+                   gmean=math.sqrt(sensitivity * specificity) if both else None,
+                   raccuracy=(sensitivity + specificity) / 2 if both else None)
     return metrics
 
 
@@ -96,8 +116,12 @@ def save_checkpoint(path, payload):
     temporary.replace(path)
 
 
-def fit(model, train_ds, val_ds, output, config, provenance):
+def fit(model, train_ds, val_ds, output, config, provenance, on_epoch_end=None):
     """Train one candidate and select the epoch by full-validation PR-AUC.
+
+    ``on_epoch_end(epoch, model)``, if given, runs after each validation pass; a dict it
+    returns is stored in that epoch's history row (the SNN logs firing rates this way).
+    It must not change the model or the selection.
 
     Class imbalance is handled only by weighted loss; samples are uniformly
     shuffled without replacement. A sample budget, if set, defines a shorter
@@ -154,6 +178,8 @@ def fit(model, train_ds, val_ds, output, config, provenance):
         metrics, labels, probabilities = evaluate(model, val_loader, device, config["log_every"])
         row = dict(epoch=epoch, train_loss=total_loss / seen, training_windows=seen,
                    validation=metrics, seconds=time.perf_counter() - start)
+        if on_epoch_end is not None:
+            row.update(on_epoch_end(epoch, model) or {})
         history.append(row)
         (output / "history.json").write_text(json.dumps(history, indent=2) + "\n")
         improved = metrics["pr_auc"] > best_score

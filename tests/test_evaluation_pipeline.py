@@ -97,3 +97,31 @@ def test_pipeline_freezes_validation_rule_and_scores_all_test_masks(tmp_path, mo
     with pytest.raises(ValueError, match="Calibration does not match"):
         run(arguments)
     assert not arguments.output.exists()
+
+
+def test_pipeline_evaluates_snn_checkpoint_and_reports_firing_rates(tmp_path):
+    from src.models.snn import SNNClassifier, load_snn_config
+    arguments = make_experiment(tmp_path)
+    saved = torch.load(arguments.checkpoint, weights_only=True)
+    model_cfg = {**load_snn_config()["model"], "n_hidden": 2}
+    torch.manual_seed(9)
+    saved.update(model_state_dict=SNNClassifier(model_cfg).state_dict(),
+                 config=dict(saved["config"], model_type="snn", model=model_cfg))
+    torch.save(saved, arguments.checkpoint)
+    run(arguments)
+    arguments.stage, arguments.calibration = "test", arguments.output / "calibration.json"
+    arguments.output = tmp_path / "test_results"
+    run(arguments)
+    pooled = pd.read_csv(arguments.output / "pooled_metrics.csv")
+    assert len(pooled) == 7
+    for column in ("firing_rate_layer1", "firing_rate_layer2", "firing_rate_mean"):
+        assert pooled[column].between(0, 1).all()
+    for column in ("roc_auc", "sensitivity", "specificity", "gmean", "raccuracy",
+                   "macs", "accumulates", "energy_mj", "dense_energy_mj"):
+        assert column in pooled
+    assert (pooled.energy_mj <= pooled.dense_energy_mj).all()
+    summary = json.loads((arguments.output / "summary.json").read_text())
+    assert summary["model_type"] == "snn"
+    assert summary["energy"]["accumulates"] >= 0 and summary["energy"]["spike_driven"]
+    patients = pd.read_csv(arguments.output / "patient_metrics.csv")
+    assert {"sensitivity", "gmean", "roc_auc"} <= set(patients.columns)

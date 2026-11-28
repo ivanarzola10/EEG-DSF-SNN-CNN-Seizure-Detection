@@ -18,6 +18,23 @@ def test_pr_auc_and_average_precision_are_distinguished():
         binary_metrics([0, 1], [.1, np.nan])
 
 
+def test_paper_metrics_at_fixed_threshold():
+    # p > 0.5: TP=2 (.9,.6), FN=1 (.5 is not above), TN=3, FP=1 (.7)
+    metrics = binary_metrics([1, 1, 1, 0, 0, 0, 0], [.9, .6, .5, .1, .2, .3, .7])
+    assert (metrics["tp"], metrics["fn"], metrics["tn"], metrics["fp"]) == (2, 1, 3, 1)
+    assert metrics["sensitivity"] == pytest.approx(2 / 3)
+    assert metrics["specificity"] == pytest.approx(3 / 4)
+    assert metrics["gmean"] == pytest.approx((2 / 3 * 3 / 4) ** .5)
+    assert metrics["raccuracy"] == pytest.approx((2 / 3 + 3 / 4) / 2)
+    # RAccuracy with r = negatives / positives is balanced accuracy.
+    r = 4 / 3
+    assert metrics["raccuracy"] == pytest.approx((r * 2 + 3) / (r * 3 + 4))
+    assert metrics["roc_auc"] == pytest.approx(10 / 12)
+    no_seizures = binary_metrics([0, 0], [.1, .9])
+    assert no_seizures["sensitivity"] is None and no_seizures["gmean"] is None
+    assert no_seizures["specificity"] == .5 and no_seizures["roc_auc"] is None
+
+
 def test_weights_use_only_training_class_counts():
     torch.testing.assert_close(class_weights([0] * 9 + [1]), torch.tensor([10 / 18, 5.]))
     with pytest.raises(ValueError, match="Training"):
