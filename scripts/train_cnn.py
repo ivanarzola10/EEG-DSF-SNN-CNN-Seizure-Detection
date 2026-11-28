@@ -7,7 +7,6 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 from importlib.metadata import version
-import itertools
 import json
 from pathlib import Path
 import shutil
@@ -29,9 +28,12 @@ def parse_args():
     parser.add_argument("--raw-dir", type=Path)
     parser.add_argument("--data-root", type=Path, default=CACHE, help="Preferred prepared cache directory")
     parser.add_argument("--smoke", action="store_true", help="Exercise the pipeline on three short real EDF excerpts")
+    parser.add_argument("--evaluate-test", action="store_true",
+                        help="Score held-out patients after validation calibration (always enabled in smoke mode)")
     parser.add_argument("--experiment-config", type=Path, default=Path("configs/experiment.json"))
     parser.add_argument("--channel-masking", choices=["mixed", "none"], default="mixed",
                         help="Default: uniform complete/25/50/75%% missing-channel augmentation; none is an ablation")
+    parser.add_argument("--dsf", action="store_true", help="Jointly train log-variance DSF before the CNN")
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--patience", type=int, default=5, help="Epochs without improved validation PR-AUC; 0 disables")
     parser.add_argument("--batch-size", type=int, default=16)
@@ -47,7 +49,14 @@ def parse_args():
     parser.add_argument("--threads", type=int, default=0, help="CPU threads; 0 keeps PyTorch default")
     parser.add_argument("--log-every", type=int, default=100)
     parser.add_argument("--dropout", type=float, default=0.5)
+    parser.add_argument("--temporal-filters", type=int,
+                        help="Number of temporal and spatial filters (default: 20 with DSF, otherwise 40)")
+    parser.add_argument("--temporal-kernel-size", type=int, default=25)
+    parser.add_argument("--pool-size", type=int, default=75)
+    parser.add_argument("--pool-stride", type=int, default=15)
     args = parser.parse_args()
+    if args.temporal_filters is None:
+        args.temporal_filters = 20 if args.dsf else 40
     for name in ("epochs", "batch_size", "validation_batch_size"):
         if getattr(args, name) <= 0:
             parser.error(f"{name} must be positive")
@@ -56,6 +65,11 @@ def parse_args():
             parser.error(f"{name} must be nonnegative")
     if not 0 <= args.dropout < 1 or args.learning_rate <= 0 or args.weight_decay < 0 or args.gradient_clip <= 0:
         parser.error("Invalid dropout, learning rate, weight decay or gradient clip")
+    if min(args.temporal_filters, args.temporal_kernel_size, args.pool_size, args.pool_stride) <= 0:
+        parser.error("Filter and pooling settings must be positive")
+    if args.temporal_kernel_size + args.pool_size - 1 > 1024:
+        parser.error("The temporal kernel and pooling window must fit within 1024 samples")
+    args.evaluate_test = args.evaluate_test or args.smoke
     return args
 
 
@@ -66,7 +80,9 @@ def main():
     validate_alarm_policy(experiment["alarm_calibration"])
     cfg, cohort, sources, unavailable = resolve_inputs(args.raw_dir)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    output = (Path("runs") / ("cnn_smoke" if args.smoke else "cnn") / timestamp).resolve()
+    variant = "cnn_dsf" if args.dsf else "cnn"
+    run_group = f"{variant}_smoke" if args.smoke else variant
+    output = (Path("runs") / run_group / timestamp).resolve()
     output.mkdir(parents=True, exist_ok=False)
     cache = args.data_root.resolve()
     if args.smoke:
@@ -103,38 +119,31 @@ def main():
     write_json(experiment_path, experiment)
     shutil.copy2(root / "manifest.json", output / "dataset_manifest.json")
     shutil.copy2(root / "normalization.npz", output / "normalization.npz")
-    filters = [2] if args.smoke else [20, 40]
-    settings = [(count, kernel, pool, stride)
-                for count, kernel, (pool, stride) in itertools.product(filters, [25, 51], [(75, 15), (150, 30)])]
     config = {k: v for k, v in vars(args).items() if k not in ("raw_dir", "data_root", "experiment_config")}
-    config.update(experiment=experiment, imbalance_policy="inverse-frequency weighted loss only")
-    write_json(output / "config.json", dict(config, candidates=settings))
-    results = []
-    best = None
-    for trial, (filters, kernel, pool, stride) in enumerate(settings):
-        seed_everything(args.seed)
-        model_config = dict(n_temporal_filters=filters, temporal_kernel_size=kernel,
-                            pool_size=pool, pool_stride=stride, dropout=args.dropout,
-                            n_channels=18, n_times=1024, n_classes=2)
-        print(f"Candidate {trial + 1}/{len(settings)}: {model_config}", flush=True)
-        summary = fit(ShallowEEGCNN(**model_config), datasets["train"], datasets["val"],
-                      output / f"candidate_{trial:02}", dict(config, model=model_config), provenance)
-        results.append({**summary, "model": model_config})
-        if best is None or summary["best_validation_pr_auc"] > best["best_validation_pr_auc"]:
-            best = results[-1]
-            shutil.copy2(summary["checkpoint"], output / "best.pt")
-        selection = dict(best=best, candidates=results, test_evaluated=False,
-                         hyperparameter_search_completed=len(results) == len(settings))
-        write_json(output / "selection.json", selection)
-    print(f"Selected checkpoint: {output / 'best.pt'}; validation PR-AUC={best['best_validation_pr_auc']:.6f}", flush=True)
+    model_config = dict(n_temporal_filters=args.temporal_filters, temporal_kernel_size=args.temporal_kernel_size,
+                        pool_size=args.pool_size, pool_stride=args.pool_stride, dropout=args.dropout,
+                        n_channels=18, n_times=1024, n_classes=2, dsf=args.dsf)
+    config.update(model=model_config, experiment=experiment, imbalance_policy="inverse-frequency weighted loss only")
+    write_json(output / "config.json", config)
+    seed_everything(args.seed)
+    print(f"Training ShallowFBCSPNet: {model_config}", flush=True)
+    summary = fit(ShallowEEGCNN(**model_config), datasets["train"], datasets["val"],
+                  output / "training", config, provenance)
+    checkpoint = output / "best.pt"
+    shutil.copy2(summary["checkpoint"], checkpoint)
+    best = dict(summary, checkpoint=str(checkpoint), model=model_config)
+    selection = dict(best=best, test_evaluated=False)
+    write_json(output / "selection.json", selection)
+    print(f"Selected checkpoint: {checkpoint}; validation PR-AUC={best['best_validation_pr_auc']:.6f}", flush=True)
     evaluation = dict(data_root=root, experiment_config=experiment_path, checkpoint=output / "best.pt",
                       mask_manifest=output / "evaluation_masks.json", device=args.device, threads=args.threads,
                       batch_size=args.batch_size, workers=args.workers, log_every=args.log_every)
     calibration = output / "validation" / "calibration.json"
     run(SimpleNamespace(**evaluation, stage="calibrate", output=calibration.parent, calibration=None))
-    run(SimpleNamespace(**evaluation, stage="test", output=output / "test", calibration=calibration))
-    write_json(output / "selection.json", dict(selection, test_evaluated=True))
-    print(f"Completed {'smoke' if args.smoke else 'final'} run at {output}", flush=True)
+    if args.evaluate_test:
+        run(SimpleNamespace(**evaluation, stage="test", output=output / "test", calibration=calibration))
+        write_json(output / "selection.json", dict(selection, test_evaluated=True))
+    print(f"Completed run at {output}", flush=True)
 
 
 if __name__ == "__main__":
