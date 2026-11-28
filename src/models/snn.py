@@ -103,6 +103,19 @@ class CompactEESNN(nn.Module):
     def count_params(self) -> int:
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
+    def neurons_per_layer(self) -> list[int]:
+        """LIF neurons in each hidden layer (feature maps x height x width)."""
+        widths = [self.input_conv[0].out_channels] + [c[0].out_channels for c in self.hidden_convs]
+        return [w * h * t for w, (h, t) in zip(widths, self.layer_shapes)]
+
+    def spike_driven_modules(self) -> dict[str, nn.Module]:
+        """Synaptic modules whose input is a binary spike map (relative names). The input
+        convolution and the readout receive real values and are not listed."""
+        modules = {f"hidden_convs.{i}": conv for i, conv in enumerate(self.hidden_convs)}
+        if self.time_steps > 1:
+            modules["feedback"] = self.feedback
+        return modules
+
     def forward(self, x: torch.Tensor, return_rates: bool = False):
         """``x`` [B, C, T] -> logits [B]. With ``return_rates``, also a list with each hidden
         layer's firing rate per window ([B], spikes / (neurons * time_steps))."""
@@ -131,3 +144,63 @@ class CompactEESNN(nn.Module):
         if return_rates:
             return logits, [r / self.time_steps for r in spike_sums]
         return logits
+
+
+class SNNClassifier(nn.Module):
+    """Adapter that lets the SNN share the CNN's training and evaluation code.
+
+    Input [B, C, T] -> two class scores [B, 2] = [0, z], where z is the EESNN output logit.
+    Softmax of [0, z] equals sigmoid(z), so the seizure probability is still the sigmoid of
+    the output potential (proposal Sec. III-B). Class-weighted cross-entropy on [0, z] is
+    identical to class-weighted BCE on z, with the same weight-normalized batch mean the CNN
+    gets from ``nn.CrossEntropyLoss(weight=...)``.
+
+    ``front_end`` (e.g. DSF) is applied before the first spiking layer and must preserve the
+    input shape -- the same contract as ``ShallowEEGCNN``.
+
+    Mean firing rate per hidden layer is accumulated separately for train and eval mode;
+    read with ``spike_stats()`` and clear with ``reset_spike_stats()``.
+    """
+
+    def __init__(self, model_cfg: dict, n_channels: int = 18, n_times: int = 1024, *,
+                 front_end: nn.Module | None = None):
+        super().__init__()
+        if front_end is not None and not isinstance(front_end, nn.Module):
+            raise TypeError("front_end must be a PyTorch nn.Module")
+        self.input_shape = (n_channels, n_times)
+        self.front_end = front_end
+        self.backbone = CompactEESNN(model_cfg, n_channels, n_times)
+        self.reset_spike_stats()
+
+    def neurons_per_layer(self) -> list[int]:
+        return self.backbone.neurons_per_layer()
+
+    def spike_driven_modules(self) -> dict[str, nn.Module]:
+        return {f"backbone.{name}": m for name, m in self.backbone.spike_driven_modules().items()}
+
+    def reset_spike_stats(self) -> None:
+        self._spike_sums = {"train": None, "eval": None}
+        self._spike_windows = {"train": 0, "eval": 0}
+
+    def spike_stats(self) -> dict:
+        """{"train"|"eval": [mean firing rate per hidden layer] or None if no windows seen}."""
+        return {mode: None if sums is None else
+                [float(s) / self._spike_windows[mode] for s in sums]
+                for mode, sums in self._spike_sums.items()}
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.ndim != 3 or tuple(x.shape[1:]) != self.input_shape:
+            raise ValueError(f"Expected [batch, {self.input_shape}], got {tuple(x.shape)}")
+        if self.front_end is not None:
+            transformed = self.front_end(x)
+            if (not isinstance(transformed, torch.Tensor) or transformed.shape != x.shape
+                    or transformed.dtype != x.dtype or transformed.device != x.device):
+                raise ValueError("front_end must preserve the input tensor shape, dtype and device")
+            x = transformed
+        z, rates = self.backbone(x, return_rates=True)
+        mode = "train" if self.training else "eval"
+        batch = [r.detach().sum() for r in rates]
+        sums = self._spike_sums[mode]
+        self._spike_sums[mode] = batch if sums is None else [a + b for a, b in zip(sums, batch)]
+        self._spike_windows[mode] += len(x)
+        return torch.stack([torch.zeros_like(z), z], dim=1)
